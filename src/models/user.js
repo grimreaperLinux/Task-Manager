@@ -2,6 +2,7 @@ const validator = require('validator')
 const mongoose = require('mongoose')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
+const Task = require('./tasks')
 
 const userSchema = new mongoose.Schema({
     name: {
@@ -47,6 +48,13 @@ const userSchema = new mongoose.Schema({
     }] 
 })
 
+userSchema.virtual('tasks', {
+    ref: 'Task',
+    localField:'_id',
+    foreignField: 'owner'
+})
+
+
 userSchema.methods.generateAuthToken = async function() { //this function is accessible to a instance of a model
     const user = this
     const token = jwt.sign({_id: user._id.toString()}, 'hehhehehhe')
@@ -54,6 +62,18 @@ userSchema.methods.generateAuthToken = async function() { //this function is acc
     await user.save()
     return token
 
+}
+
+userSchema.methods.toJSON = function () { // toJSON function runs whenever object gets stringifyed into JSON
+                                          // which is what res.send does to a object
+                                          // (runs JSON.stringify in the background)
+    const user = this
+    const userObject = user.toObject ()
+
+    delete userObject.password
+    delete userObject.tokens
+
+    return userObject
 }
 
 userSchema.statics.findByCredentials = async (email,password) => { //this function is accessible to a model itself.
@@ -72,7 +92,7 @@ userSchema.statics.findByCredentials = async (email,password) => { //this functi
     return user
 }
 
-//hash the  plain text password
+//hash the plain text password
 userSchema.pre('save', async function (next) {
     const user = this
 
@@ -80,6 +100,13 @@ userSchema.pre('save', async function (next) {
         user.password = await bcrypt.hash(user.password, 8)
     }
 
+    next()
+})
+
+//Delete user's tasks when user's profile is deleted
+userSchema.pre('remove', async function (next) {
+    const user = this
+    Task.deleteMany({ owner: user._id})
     next()
 })
 
